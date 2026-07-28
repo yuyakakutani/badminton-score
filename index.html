@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>バドミントン得点アプリ</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+    background: #10141c;
+    color: #f2f4f8;
+    min-height: 100vh;
+  }
+  .screen { display: none; padding: 20px 16px 100px; max-width: 480px; margin: 0 auto; }
+  .screen.active { display: block; }
+  h1 { font-size: 20px; text-align: center; margin: 8px 0 24px; }
+  label { display: block; font-size: 13px; color: #a7adba; margin: 16px 0 4px; }
+  input[type="text"], input[type="number"] {
+    width: 100%; padding: 10px 12px; font-size: 16px; border-radius: 8px;
+    border: 1px solid #333a48; background: #1a2029; color: #f2f4f8;
+  }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  .radio-group { display: flex; gap: 8px; margin-top: 6px; }
+  .radio-btn {
+    flex: 1; text-align: center; padding: 10px; border-radius: 8px;
+    border: 1px solid #333a48; cursor: pointer; font-size: 14px;
+  }
+  .radio-btn.selected { background: #3b6fe0; border-color: #3b6fe0; }
+  .stepper { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .stepper input[type="number"] { text-align: center; }
+  .step-btn {
+    flex-shrink: 0; width: 52px; height: 52px; font-size: 26px; font-weight: bold;
+    border-radius: 12px; border: 1px solid #333a48; background: #1a2029; color: #fff;
+    cursor: pointer; line-height: 1;
+  }
+  .step-btn:active { background: #24304a; }
+  select.quick-pick {
+    width: 100%; padding: 9px 10px; font-size: 14px; border-radius: 8px;
+    border: 1px solid #333a48; background: #14181f; color: #a7adba; margin-bottom: 6px;
+  }
+  .name-field { margin-bottom: 8px; }
+  .setup-court {
+    display: flex; margin-top: 8px; border-radius: 10px; background: #1a2029;
+    border: 1px solid #262c37; padding: 14px 10px; gap: 10px;
+  }
+  .setup-court-col { flex: 1; min-width: 0; }
+  .setup-court-divider { width: 2px; background: #333a48; flex-shrink: 0; }
+  .setup-court-label {
+    text-align: center; font-size: 13px; font-weight: bold; color: #c4c9d4; margin-bottom: 10px;
+  }
+  .setup-court select.quick-pick { font-size: 13px; padding: 8px; }
+  .setup-court input[type="text"] { font-size: 15px; padding: 9px 8px; text-align: center; }
+  .player-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; background: #1a2029;
+    border: 1px solid #333a48; border-radius: 999px; padding: 5px 6px 5px 12px; font-size: 12px;
+  }
+  .chip button {
+    background: none; border: none; color: #a7adba; font-size: 15px; line-height: 1;
+    cursor: pointer; padding: 2px 4px;
+  }
+  .chips-label { font-size: 12px; color: #7d8496; margin-top: 4px; }
+  button.primary {
+    width: 100%; margin-top: 28px; padding: 14px; font-size: 16px; font-weight: bold;
+    border: none; border-radius: 10px; background: #3b6fe0; color: #fff; cursor: pointer;
+  }
+  button.secondary {
+    width: 100%; margin-top: 10px; padding: 12px; font-size: 14px;
+    border: 1px solid #333a48; border-radius: 10px; background: transparent; color: #a7adba; cursor: pointer;
+  }
+  .match-header { text-align: center; font-size: 13px; color: #a7adba; margin-bottom: 10px; }
+  .court-wrap {
+    margin-bottom: 14px; border-radius: 10px; background: #1a2029; border: 1px solid #262c37;
+    padding: 6px 4px 2px;
+  }
+  .doubles-only { display: none; margin-top: 6px; }
+  .doubles-only.show { display: block; }
+  .scoreboard { display: flex; gap: 10px; }
+  .team-panel {
+    flex: 1; border-radius: 14px; padding: 18px 10px; text-align: center;
+    cursor: pointer; user-select: none; border: 2px solid transparent;
+    transition: transform .05s;
+  }
+  .team-panel:active { transform: scale(0.97); }
+  .team-panel.a { background: #1b2e52; }
+  .team-panel.b { background: #4a2230; }
+  .team-panel.serving { border-color: #ffd257; }
+  .team-name { font-size: 15px; margin-bottom: 6px; min-height: 18px; }
+  .serve-badge { font-size: 12px; color: #ffd257; margin-bottom: 4px; min-height: 16px; }
+  .score-num { font-size: 56px; font-weight: bold; line-height: 1; }
+  .games-count { text-align: center; font-size: 14px; color: #a7adba; margin: 14px 0 4px; }
+  .history { font-size: 12px; color: #7d8496; text-align: center; margin-bottom: 10px; }
+  .controls { display: flex; gap: 10px; margin-top: 18px; }
+  .controls button {
+    flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #333a48;
+    background: #1a2029; color: #f2f4f8; font-size: 14px; cursor: pointer;
+  }
+  .banner {
+    display: none; position: fixed; inset: 0; background: rgba(10,12,18,0.92);
+    align-items: center; justify-content: center; flex-direction: column; z-index: 10; padding: 20px;
+  }
+  .banner.show { display: flex; }
+  .banner-title { font-size: 22px; font-weight: bold; margin-bottom: 8px; text-align: center; }
+  .banner-sub { font-size: 14px; color: #a7adba; margin-bottom: 24px; text-align: center; }
+  .banner button {
+    width: 100%; max-width: 280px; padding: 14px; font-size: 16px; font-weight: bold;
+    border: none; border-radius: 10px; background: #3b6fe0; color: #fff; margin-bottom: 10px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<div id="setup" class="screen active">
+  <h1>🏸 バドミントン得点アプリ</h1>
+
+  <label>試合形式</label>
+  <div class="radio-group" id="modeGroup">
+    <div class="radio-btn" data-val="singles">シングルス</div>
+    <div class="radio-btn selected" data-val="doubles">ダブルス</div>
+  </div>
+
+  <label>選手名</label>
+  <div class="setup-court">
+    <div class="setup-court-col">
+      <div class="setup-court-label">チームA</div>
+      <div class="name-field doubles-only show">
+        <select class="quick-pick" data-target="nameA2"></select>
+        <input type="text" id="nameA2" placeholder="2" maxlength="10">
+      </div>
+      <div class="name-field">
+        <select class="quick-pick" data-target="nameA1"></select>
+        <input type="text" id="nameA1" placeholder="1" maxlength="10">
+      </div>
+    </div>
+    <div class="setup-court-divider"></div>
+    <div class="setup-court-col">
+      <div class="setup-court-label">チームB</div>
+      <div class="name-field">
+        <select class="quick-pick" data-target="nameB1"></select>
+        <input type="text" id="nameB1" placeholder="1" maxlength="10">
+      </div>
+      <div class="name-field doubles-only show">
+        <select class="quick-pick" data-target="nameB2"></select>
+        <input type="text" id="nameB2" placeholder="2" maxlength="10">
+      </div>
+    </div>
+  </div>
+
+  <div class="chips-label" id="chipsLabel" style="display:none;">登録済みの選手(タップで削除)</div>
+  <div class="player-chips" id="playerChips"></div>
+
+  <label>点数</label>
+  <div class="radio-group" id="targetGroup">
+    <div class="radio-btn" data-val="11">11点</div>
+    <div class="radio-btn selected" data-val="15">15点</div>
+    <div class="radio-btn" data-val="21">21点</div>
+  </div>
+  <div class="stepper">
+    <button type="button" class="step-btn" id="targetMinus">−</button>
+    <input type="number" id="target" value="15" min="1" max="99">
+    <button type="button" class="step-btn" id="targetPlus">＋</button>
+  </div>
+
+  <label>最初のサーブ権</label>
+  <div class="radio-group" id="serveGroup">
+    <div class="radio-btn selected" data-val="A">チームA</div>
+    <div class="radio-btn" data-val="B">チームB</div>
+  </div>
+
+  <button class="primary" id="startBtn">試合開始</button>
+</div>
+
+<div id="match" class="screen">
+  <div class="match-header" id="matchHeader"></div>
+
+  <div class="court-wrap" id="court"></div>
+
+  <div class="scoreboard">
+    <div class="team-panel a" id="panelA">
+      <div class="serve-badge" id="serveBadgeA"></div>
+      <div class="team-name" id="scoreNameA"></div>
+      <div class="score-num" id="scoreA">0</div>
+    </div>
+    <div class="team-panel b" id="panelB">
+      <div class="serve-badge" id="serveBadgeB"></div>
+      <div class="team-name" id="scoreNameB"></div>
+      <div class="score-num" id="scoreB">0</div>
+    </div>
+  </div>
+
+  <div class="games-count" id="gamesCount"></div>
+  <div class="history" id="history"></div>
+
+  <div class="controls">
+    <button id="undoBtn">↩ 元に戻す</button>
+    <button id="quitBtn">🏠 設定に戻る</button>
+  </div>
+</div>
+
+<div class="banner" id="gameBanner">
+  <div class="banner-title" id="gameBannerTitle"></div>
+  <div class="banner-sub" id="gameBannerSub"></div>
+  <button id="nextGameBtn">次のゲームへ</button>
+</div>
+
+<div class="banner" id="matchBanner">
+  <div class="banner-title" id="matchBannerTitle"></div>
+  <div class="banner-sub" id="matchBannerSub"></div>
+  <button id="newMatchBtn">新しい試合を始める</button>
+</div>
+
+<script>
+  let state = null;
+
+  function el(id){ return document.getElementById(id); }
+
+  // ---- setup screen interactions ----
+  function setupRadioGroup(groupId){
+    const group = el(groupId);
+    group.querySelectorAll('.radio-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        group.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+      });
+    });
+  }
+  setupRadioGroup('serveGroup');
+
+  el('modeGroup').querySelectorAll('.radio-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      el('modeGroup').querySelectorAll('.radio-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      const isDoubles = btn.dataset.val === 'doubles';
+      document.querySelectorAll('.doubles-only').forEach(inp => inp.classList.toggle('show', isDoubles));
+    });
+  });
+
+  el('targetGroup').querySelectorAll('.radio-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      el('targetGroup').querySelectorAll('.radio-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      el('target').value = btn.dataset.val;
+    });
+  });
+  el('target').addEventListener('input', () => {
+    el('targetGroup').querySelectorAll('.radio-btn').forEach(b => b.classList.remove('selected'));
+  });
+  function adjustTarget(delta){
+    const cur = parseInt(el('target').value) || 15;
+    const next = Math.max(1, Math.min(99, cur + delta));
+    el('target').value = next;
+    el('targetGroup').querySelectorAll('.radio-btn').forEach(b => b.classList.remove('selected'));
+  }
+  el('targetMinus').addEventListener('click', () => adjustTarget(-1));
+  el('targetPlus').addEventListener('click', () => adjustTarget(1));
+
+  function getSelected(groupId){
+    return el(groupId).querySelector('.selected').dataset.val;
+  }
+
+  // ---- registered players (saved in this browser, so next time you can just
+  // pick from the list instead of retyping) ----
+  const PLAYER_STORAGE_KEY = 'badmintonRegisteredPlayers';
+
+  function loadRegisteredPlayers(){
+    try {
+      const raw = localStorage.getItem(PLAYER_STORAGE_KEY);
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveRegisteredPlayers(list){
+    try { localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(list)); } catch (e) {}
+  }
+
+  function registerPlayer(name){
+    if (!name) return;
+    const list = loadRegisteredPlayers();
+    if (!list.includes(name)) {
+      list.push(name);
+      saveRegisteredPlayers(list);
+    }
+  }
+
+  function removeRegisteredPlayer(name){
+    const list = loadRegisteredPlayers().filter(n => n !== name);
+    saveRegisteredPlayers(list);
+    renderPlayerRegistryUI();
+  }
+
+  function renderPlayerRegistryUI(){
+    const list = loadRegisteredPlayers();
+
+    document.querySelectorAll('select.quick-pick').forEach(sel => {
+      const currentTargetVal = el(sel.dataset.target).value;
+      sel.innerHTML = '<option value="">-- 登録済みから選ぶ --</option>' +
+        list.map(n => `<option value="${escapeXml(n)}">${escapeXml(n)}</option>`).join('');
+      sel.value = list.includes(currentTargetVal) ? currentTargetVal : '';
+    });
+
+    el('chipsLabel').style.display = list.length ? 'block' : 'none';
+    el('playerChips').innerHTML = list.map(n => `
+      <span class="chip">${escapeXml(n)}<button type="button" data-name="${escapeXml(n)}">×</button></span>
+    `).join('');
+    el('playerChips').querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => removeRegisteredPlayer(btn.dataset.name));
+    });
+  }
+
+  document.querySelectorAll('select.quick-pick').forEach(sel => {
+    sel.addEventListener('change', () => {
+      if (sel.value) el(sel.dataset.target).value = sel.value;
+    });
+  });
+
+  renderPlayerRegistryUI();
+
+  el('startBtn').addEventListener('click', () => {
+    const mode = getSelected('modeGroup');
+    const a1 = el('nameA1').value.trim() || '1';
+    const a2 = el('nameA2').value.trim() || '2';
+    const b1 = el('nameB1').value.trim() || '1';
+    const b2 = el('nameB2').value.trim() || '2';
+    const playersA = mode === 'doubles' ? [a1, a2] : [a1];
+    const playersB = mode === 'doubles' ? [b1, b2] : [b1];
+
+    registerPlayer(a1);
+    if (mode === 'doubles') registerPlayer(a2);
+    registerPlayer(b1);
+    if (mode === 'doubles') registerPlayer(b2);
+    renderPlayerRegistryUI();
+    const nameA = mode === 'doubles' ? `${a1}/${a2}` : a1;
+    const nameB = mode === 'doubles' ? `${b1}/${b2}` : b1;
+    const target = parseInt(el('target').value) || 15;
+    const gamesToWin = 1; // マッチ形式の選択UIは廃止したため、常に1ゲーム勝負
+    const firstServer = getSelected('serveGroup');
+
+    state = {
+      mode, players: { A: playersA, B: playersB },
+      nameA, nameB, target, gamesToWin,
+      maxGames: gamesToWin * 2 - 1,
+      gameNumber: 1,
+      scoreA: 0, scoreB: 0,
+      gamesA: 0, gamesB: 0,
+      history: [],
+      serving: firstServer,
+      rightIdx: { A: 0, B: 0 },
+      ends: { A: 'left', B: 'right' },
+      undoStack: []
+    };
+
+    el('setup').classList.remove('active');
+    el('match').classList.add('active');
+    render();
+  });
+
+  // ---- match interactions ----
+  el('panelA').addEventListener('click', () => addPoint('A'));
+  el('panelB').addEventListener('click', () => addPoint('B'));
+  el('undoBtn').addEventListener('click', undo);
+  el('quitBtn').addEventListener('click', () => {
+    if (confirm('設定画面に戻ります。現在の試合内容は失われます。よろしいですか？')) {
+      el('match').classList.remove('active');
+      el('setup').classList.add('active');
+    }
+  });
+  el('nextGameBtn').addEventListener('click', () => {
+    el('gameBanner').classList.remove('show');
+    render();
+  });
+  el('newMatchBtn').addEventListener('click', () => {
+    el('matchBanner').classList.remove('show');
+    el('match').classList.remove('active');
+    el('setup').classList.add('active');
+  });
+
+  function cloneState(){
+    return JSON.parse(JSON.stringify({
+      scoreA: state.scoreA, scoreB: state.scoreB,
+      gamesA: state.gamesA, gamesB: state.gamesB,
+      history: state.history, serving: state.serving,
+      ends: state.ends, gameNumber: state.gameNumber,
+      rightIdx: state.rightIdx
+    }));
+  }
+
+  function addPoint(team){
+    if (matchOver()) return;
+    state.undoStack.push(cloneState());
+
+    const prevServing = state.serving;
+    if (team === 'A') state.scoreA++; else state.scoreB++;
+
+    // Doubles serving rule: when a side WINS A POINT WHILE ALREADY SERVING, the
+    // server and partner swap the right/left service court (BWF Law 12.4).
+    // This also means the same player keeps serving throughout a streak, just
+    // alternating right/left each time - the identity only passes to the
+    // partner once this side actually regains serve after a side-out, and that
+    // falls out automatically from the even/odd score rule below.
+    if (state.mode === 'doubles' && team === prevServing) {
+      state.rightIdx[team] = 1 - state.rightIdx[team];
+    }
+    state.serving = team;
+
+    const winner = checkGameWinner();
+    if (winner) finishGame(winner);
+
+    render();
+  }
+
+  function checkGameWinner(){
+    const { scoreA, scoreB, target } = state;
+    if (scoreA >= target && scoreA - scoreB >= 2) return 'A';
+    if (scoreB >= target && scoreB - scoreA >= 2) return 'B';
+    return null;
+  }
+
+  function swapEnds(){
+    state.ends = { A: state.ends.A === 'left' ? 'right' : 'left', B: state.ends.B === 'left' ? 'right' : 'left' };
+  }
+
+  function finishGame(winner){
+    state.history.push({ a: state.scoreA, b: state.scoreB, winner });
+    if (winner === 'A') state.gamesA++; else state.gamesB++;
+
+    if (state.gamesA >= state.gamesToWin || state.gamesB >= state.gamesToWin) {
+      showMatchBanner(winner);
+      return;
+    }
+
+    showGameBanner(winner);
+    state.scoreA = 0; state.scoreB = 0;
+    state.serving = winner;
+    state.rightIdx = { A: 0, B: 0 };
+    state.gameNumber++;
+    swapEnds();
+  }
+
+  function undo(){
+    if (state.undoStack.length === 0) return;
+    const prev = state.undoStack.pop();
+    Object.assign(state, prev);
+    el('gameBanner').classList.remove('show');
+    el('matchBanner').classList.remove('show');
+    render();
+  }
+
+  function matchOver(){
+    return state.gamesA >= state.gamesToWin || state.gamesB >= state.gamesToWin;
+  }
+
+  function showGameBanner(winner){
+    const winnerName = winner === 'A' ? state.nameA : state.nameB;
+    el('gameBannerTitle').textContent = `${winnerName} がゲーム${state.gameNumber}を獲得`;
+    el('gameBannerSub').textContent = `${state.scoreA} - ${state.scoreB}　次はゲーム${state.gameNumber + 1}`;
+    el('gameBanner').classList.add('show');
+  }
+
+  function showMatchBanner(winner){
+    const winnerName = winner === 'A' ? state.nameA : state.nameB;
+    el('matchBannerTitle').textContent = `🏆 ${winnerName} の勝利！`;
+    el('matchBannerSub').textContent = `${state.gamesA} - ${state.gamesB}`;
+    el('matchBanner').classList.add('show');
+  }
+
+  function escapeXml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function shortName(name){
+    return escapeXml(String(name || '').slice(0, 5));
+  }
+
+  // Score-parity is what actually decides right vs left, per BWF Law 12.2:
+  // even score (incl. 0) -> serve from the right court, odd -> left.
+  function isEvenScore(team){
+    const score = team === 'A' ? state.scoreA : state.scoreB;
+    return score % 2 === 0;
+  }
+
+  // Index (0/1) of the player currently serving for this team, derived from
+  // which player currently holds the right court + the team's own score parity.
+  function currentServerIdx(team){
+    if (state.mode !== 'doubles') return 0;
+    return isEvenScore(team) ? state.rightIdx[team] : 1 - state.rightIdx[team];
+  }
+
+  function currentServerName(team){
+    return state.players[team][currentServerIdx(team)];
+  }
+
+  function playerCircle(x, y, name, isServer, team){
+    const fill = team === 'A' ? '#3b6fe0' : '#c0392b';
+    const ring = isServer ? `<circle cx="${x}" cy="${y}" r="29" fill="none" stroke="#ffd257" stroke-width="4"/>` : '';
+    return `${ring}<circle cx="${x}" cy="${y}" r="24" fill="${fill}" opacity="${isServer ? 1 : 0.5}"/>` +
+      `<text x="${x}" y="${y + 5}" text-anchor="middle" font-size="13" fill="#fff">${shortName(name)}</text>`;
+  }
+
+  function courtSVG(){
+    const leftTeam = state.ends.A === 'left' ? 'A' : 'B';
+    const rightTeam = leftTeam === 'A' ? 'B' : 'A';
+    let inner = '';
+    [['left', 80], ['right', 240]].forEach(([side, cx]) => {
+      const team = side === 'left' ? leftTeam : rightTeam;
+      const players = state.players[team];
+      const isServingTeam = state.serving === team;
+      const label = team === 'A' ? state.nameA : state.nameB;
+      inner += `<text x="${cx}" y="18" text-anchor="middle" font-size="15" font-weight="bold" fill="#c4c9d4">${escapeXml(label)}</text>`;
+
+      // A team facing the net from the LEFT half of the diagram has its own
+      // right hand toward the BOTTOM of the screen; a team facing the net
+      // from the RIGHT half has its own right hand toward the TOP. So which
+      // screen position ("upper"/"lower") represents "their right court"
+      // is mirrored depending on which half they currently occupy.
+      const rightBoxY = side === 'left' ? 150 : 66;
+      const leftBoxY = side === 'left' ? 66 : 150;
+
+      if (players.length === 2) {
+        // rightIdx[team] = index of the player currently standing in this
+        // team's own right court; the other player has the left court.
+        // These positions only swap when this team wins while serving.
+        players.forEach((name, idx) => {
+          const inRightBox = state.rightIdx[team] === idx;
+          const y = inRightBox ? rightBoxY : leftBoxY;
+          const isServer = isServingTeam && currentServerIdx(team) === idx;
+          inner += playerCircle(cx, y, name, isServer, team);
+        });
+      } else {
+        // singles: the single player still moves between their own right
+        // (even score) and left (odd score) court as the rules require.
+        const y = isEvenScore(team) ? rightBoxY : leftBoxY;
+        inner += playerCircle(cx, y, players[0], isServingTeam, team);
+      }
+    });
+    return `<svg viewBox="0 0 320 220" width="100%" height="240" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="24" width="318" height="176" rx="8" fill="none" stroke="#333a48" stroke-width="2"/>
+      <line x1="160" y1="24" x2="160" y2="200" stroke="#333a48" stroke-width="2"/>
+      ${inner}
+    </svg>`;
+  }
+
+  function render(){
+    el('matchHeader').textContent =
+      `ゲーム${state.gameNumber} / 全${state.maxGames}　${state.target}点先取`;
+
+    el('court').innerHTML = courtSVG();
+
+    el('scoreNameA').textContent = state.nameA;
+    el('scoreNameB').textContent = state.nameB;
+    el('scoreA').textContent = state.scoreA;
+    el('scoreB').textContent = state.scoreB;
+
+    el('panelA').classList.toggle('serving', state.serving === 'A');
+    el('panelB').classList.toggle('serving', state.serving === 'B');
+    el('serveBadgeA').textContent = state.serving === 'A'
+      ? `サーブ権 (${state.mode === 'doubles' ? currentServerName('A') : state.nameA})` : '';
+    el('serveBadgeB').textContent = state.serving === 'B'
+      ? `サーブ権 (${state.mode === 'doubles' ? currentServerName('B') : state.nameB})` : '';
+
+    el('gamesCount').textContent = `セット数　${state.nameA} ${state.gamesA} - ${state.gamesB} ${state.nameB}`;
+
+    el('history').textContent = state.history.length
+      ? state.history.map((g, i) => `第${i+1}G ${g.a}-${g.b}`).join('　')
+      : '';
+
+    el('undoBtn').style.visibility = state.undoStack.length ? 'visible' : 'hidden';
+  }
+</script>
+</body>
+</html>
