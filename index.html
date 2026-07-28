@@ -93,10 +93,10 @@
   .score-num { font-size: 56px; font-weight: bold; line-height: 1; }
   .games-count { text-align: center; font-size: 14px; color: #a7adba; margin: 14px 0 4px; }
   .history { font-size: 12px; color: #7d8496; text-align: center; margin-bottom: 10px; }
-  .controls { display: flex; gap: 10px; margin-top: 18px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
   .controls button {
-    flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #333a48;
-    background: #1a2029; color: #f2f4f8; font-size: 14px; cursor: pointer;
+    flex: 1 1 45%; padding: 12px; border-radius: 10px; border: 1px solid #333a48;
+    background: #1a2029; color: #f2f4f8; font-size: 13px; cursor: pointer;
   }
   .banner {
     display: none; position: fixed; inset: 0; background: rgba(10,12,18,0.92);
@@ -196,6 +196,8 @@
 
   <div class="controls">
     <button id="undoBtn">↩ 元に戻す</button>
+    <button id="editPlayersBtn">✎ 選手変更</button>
+    <button id="editServeBtn">🏸 サーブ権修正</button>
     <button id="quitBtn">🏠 設定に戻る</button>
   </div>
 </div>
@@ -210,6 +212,46 @@
   <div class="banner-title" id="matchBannerTitle"></div>
   <div class="banner-sub" id="matchBannerSub"></div>
   <button id="newMatchBtn">新しい試合を始める</button>
+</div>
+
+<div class="banner" id="editPlayersBanner">
+  <div class="banner-title">選手名を編集</div>
+  <div style="width:100%; max-width:280px;">
+    <label>チームA 選手1</label>
+    <input type="text" id="editA1" maxlength="10">
+    <div class="edit-doubles-field">
+      <label>チームA 選手2</label>
+      <input type="text" id="editA2" maxlength="10">
+    </div>
+    <label>チームB 選手1</label>
+    <input type="text" id="editB1" maxlength="10">
+    <div class="edit-doubles-field">
+      <label>チームB 選手2</label>
+      <input type="text" id="editB2" maxlength="10">
+    </div>
+  </div>
+  <button id="savePlayersBtn">保存</button>
+  <button id="cancelEditPlayersBtn" style="background:transparent; color:#a7adba;">キャンセル</button>
+</div>
+
+<div class="banner" id="editServeBanner">
+  <div class="banner-title">サーブ権を修正</div>
+  <div style="width:100%; max-width:280px;">
+    <label>サーブするチーム</label>
+    <div class="radio-group" id="serveTeamGroup">
+      <div class="radio-btn" data-val="A">チームA</div>
+      <div class="radio-btn" data-val="B">チームB</div>
+    </div>
+    <div id="servePlayerWrap" style="margin-top:14px;">
+      <label>サーブする選手</label>
+      <div class="radio-group" id="servePlayerGroup">
+        <div class="radio-btn" data-val="0"></div>
+        <div class="radio-btn" data-val="1"></div>
+      </div>
+    </div>
+  </div>
+  <button id="saveServeBtn">保存</button>
+  <button id="cancelEditServeBtn" style="background:transparent; color:#a7adba;">キャンセル</button>
 </div>
 
 <script>
@@ -380,6 +422,115 @@
     el('setup').classList.add('active');
   });
 
+  // ---- edit players mid-match (names only - scores/serve state untouched) ----
+  el('editPlayersBtn').addEventListener('click', () => {
+    el('editA1').value = state.players.A[0];
+    el('editB1').value = state.players.B[0];
+    el('editA2').value = state.mode === 'doubles' ? state.players.A[1] : '';
+    el('editB2').value = state.mode === 'doubles' ? state.players.B[1] : '';
+    document.querySelectorAll('.edit-doubles-field').forEach(d => {
+      d.style.display = state.mode === 'doubles' ? 'block' : 'none';
+    });
+    el('editPlayersBanner').classList.add('show');
+  });
+
+  el('cancelEditPlayersBtn').addEventListener('click', () => {
+    el('editPlayersBanner').classList.remove('show');
+  });
+
+  el('savePlayersBtn').addEventListener('click', () => {
+    const a1 = el('editA1').value.trim() || state.players.A[0];
+    const b1 = el('editB1').value.trim() || state.players.B[0];
+    state.players.A[0] = a1;
+    state.players.B[0] = b1;
+    registerPlayer(a1);
+    registerPlayer(b1);
+
+    if (state.mode === 'doubles') {
+      const a2 = el('editA2').value.trim() || state.players.A[1];
+      const b2 = el('editB2').value.trim() || state.players.B[1];
+      state.players.A[1] = a2;
+      state.players.B[1] = b2;
+      registerPlayer(a2);
+      registerPlayer(b2);
+      state.nameA = `${a1}/${a2}`;
+      state.nameB = `${b1}/${b2}`;
+    } else {
+      state.nameA = a1;
+      state.nameB = b1;
+    }
+
+    el('editPlayersBanner').classList.remove('show');
+    render();
+  });
+
+  // ---- edit serve mid-match (correct who's serving without changing score) ----
+  setupRadioGroup('serveTeamGroup');
+  setupRadioGroup('servePlayerGroup');
+
+  function populateServePlayerGroup(team){
+    const btns = el('servePlayerGroup').querySelectorAll('.radio-btn');
+    btns.forEach((btn, idx) => {
+      btn.textContent = state.players[team][idx] || '';
+      btn.classList.toggle('selected', idx === currentServerIdx(team));
+    });
+  }
+
+  el('serveTeamGroup').querySelectorAll('.radio-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (state.mode === 'doubles') populateServePlayerGroup(btn.dataset.val);
+    });
+  });
+
+  el('editServeBtn').addEventListener('click', () => {
+    el('serveTeamGroup').querySelectorAll('.radio-btn').forEach(b => {
+      b.classList.toggle('selected', b.dataset.val === state.serving);
+    });
+    el('servePlayerWrap').style.display = state.mode === 'doubles' ? 'block' : 'none';
+    if (state.mode === 'doubles') populateServePlayerGroup(state.serving);
+    el('editServeBanner').classList.add('show');
+  });
+
+  el('cancelEditServeBtn').addEventListener('click', () => {
+    el('editServeBanner').classList.remove('show');
+  });
+
+  el('saveServeBtn').addEventListener('click', () => {
+    const chosenTeam = getSelected('serveTeamGroup');
+    state.serving = chosenTeam;
+    if (state.mode === 'doubles') {
+      const chosenIdx = parseInt(getSelected('servePlayerGroup'));
+      // Force currentServerIdx(chosenTeam) to equal chosenIdx, keeping the
+      // even/odd -> right/left rule intact (see currentServerIdx above).
+      state.rightIdx[chosenTeam] = isEvenScore(chosenTeam) ? chosenIdx : 1 - chosenIdx;
+    }
+    el('editServeBanner').classList.remove('show');
+    render();
+  });
+
+  // ---- tap a player icon in the court diagram to quickly rename them ----
+  el('court').addEventListener('click', (e) => {
+    const group = e.target.closest('[data-player-team]');
+    if (!group) return;
+    const team = group.dataset.playerTeam;
+    const idx = parseInt(group.dataset.playerIdx);
+    const oldName = state.players[team][idx];
+    const newName = prompt('選手名を入力してください', oldName);
+    if (newName === null) return;
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    state.players[team][idx] = trimmed;
+    registerPlayer(trimmed);
+    if (state.mode === 'doubles') {
+      state.nameA = `${state.players.A[0]}/${state.players.A[1]}`;
+      state.nameB = `${state.players.B[0]}/${state.players.B[1]}`;
+    } else {
+      state.nameA = state.players.A[0];
+      state.nameB = state.players.B[0];
+    }
+    render();
+  });
+
   function cloneState(){
     return JSON.parse(JSON.stringify({
       scoreA: state.scoreA, scoreB: state.scoreB,
@@ -495,11 +646,12 @@
     return state.players[team][currentServerIdx(team)];
   }
 
-  function playerCircle(x, y, name, isServer, team){
+  function playerCircle(x, y, name, isServer, team, idx){
     const fill = team === 'A' ? '#3b6fe0' : '#c0392b';
     const ring = isServer ? `<circle cx="${x}" cy="${y}" r="29" fill="none" stroke="#ffd257" stroke-width="4"/>` : '';
-    return `${ring}<circle cx="${x}" cy="${y}" r="24" fill="${fill}" opacity="${isServer ? 1 : 0.5}"/>` +
-      `<text x="${x}" y="${y + 5}" text-anchor="middle" font-size="13" fill="#fff">${shortName(name)}</text>`;
+    return `<g data-player-team="${team}" data-player-idx="${idx}" style="cursor:pointer">` +
+      `${ring}<circle cx="${x}" cy="${y}" r="24" fill="${fill}" opacity="${isServer ? 1 : 0.5}"/>` +
+      `<text x="${x}" y="${y + 5}" text-anchor="middle" font-size="13" fill="#fff">${shortName(name)}</text></g>`;
   }
 
   function courtSVG(){
@@ -529,13 +681,13 @@
           const inRightBox = state.rightIdx[team] === idx;
           const y = inRightBox ? rightBoxY : leftBoxY;
           const isServer = isServingTeam && currentServerIdx(team) === idx;
-          inner += playerCircle(cx, y, name, isServer, team);
+          inner += playerCircle(cx, y, name, isServer, team, idx);
         });
       } else {
         // singles: the single player still moves between their own right
         // (even score) and left (odd score) court as the rules require.
         const y = isEvenScore(team) ? rightBoxY : leftBoxY;
-        inner += playerCircle(cx, y, players[0], isServingTeam, team);
+        inner += playerCircle(cx, y, players[0], isServingTeam, team, 0);
       }
     });
     return `<svg viewBox="0 0 320 220" width="100%" height="240" xmlns="http://www.w3.org/2000/svg">
