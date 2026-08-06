@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>バドミントン得点アプリ</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -37,11 +38,17 @@
     cursor: pointer; line-height: 1;
   }
   .step-btn:active { background: #24304a; }
-  select.quick-pick {
-    width: 100%; padding: 9px 10px; font-size: 14px; border-radius: 8px;
-    border: 1px solid #333a48; background: #14181f; color: #a7adba; margin-bottom: 6px;
+  select.player-select {
+    width: 100%; padding: 10px 12px; font-size: 15px; border-radius: 8px;
+    border: 1px solid #333a48; background: #1a2029; color: #f2f4f8;
   }
   .name-field { margin-bottom: 8px; }
+  .register-row { display: flex; gap: 8px; margin-top: 6px; }
+  .register-row input[type="text"] { flex: 1; }
+  .register-row button {
+    flex-shrink: 0; padding: 0 18px; border-radius: 8px; border: none;
+    background: #3b6fe0; color: #fff; font-size: 14px; font-weight: bold; cursor: pointer;
+  }
   .setup-court {
     display: flex; margin-top: 8px; border-radius: 10px; background: #1a2029;
     border: 1px solid #262c37; padding: 14px 10px; gap: 10px;
@@ -51,8 +58,7 @@
   .setup-court-label {
     text-align: center; font-size: 13px; font-weight: bold; color: #c4c9d4; margin-bottom: 10px;
   }
-  .setup-court select.quick-pick { font-size: 13px; padding: 8px; }
-  .setup-court input[type="text"] { font-size: 15px; padding: 9px 8px; text-align: center; }
+  .setup-court select.player-select { font-size: 13px; padding: 9px 6px; text-align: center; }
   .player-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .chip {
     display: inline-flex; align-items: center; gap: 6px; background: #1a2029;
@@ -72,6 +78,9 @@
     border: 1px solid #333a48; border-radius: 10px; background: transparent; color: #a7adba; cursor: pointer;
   }
   .match-header { text-align: center; font-size: 13px; color: #a7adba; margin-bottom: 10px; }
+  .status-line { text-align: center; font-size: 15px; font-weight: bold; min-height: 20px; margin-bottom: 10px; }
+  .status-line.deuce { color: #ffb020; }
+  .status-line.matchpoint { color: #ff5c5c; }
   .court-wrap {
     margin-bottom: 14px; border-radius: 10px; background: #1a2029; border: 1px solid #262c37;
     padding: 6px 4px 2px;
@@ -125,30 +134,31 @@
   <label>選手名</label>
   <div class="setup-court">
     <div class="setup-court-col">
-      <div class="setup-court-label">チームA</div>
+      <div class="setup-court-label">左コート</div>
       <div class="name-field doubles-only show">
-        <select class="quick-pick" data-target="nameA2"></select>
-        <input type="text" id="nameA2" placeholder="2" maxlength="10">
+        <select class="player-select" id="nameA2"></select>
       </div>
       <div class="name-field">
-        <select class="quick-pick" data-target="nameA1"></select>
-        <input type="text" id="nameA1" placeholder="1" maxlength="10">
+        <select class="player-select" id="nameA1"></select>
       </div>
     </div>
     <div class="setup-court-divider"></div>
     <div class="setup-court-col">
-      <div class="setup-court-label">チームB</div>
+      <div class="setup-court-label">右コート</div>
       <div class="name-field">
-        <select class="quick-pick" data-target="nameB1"></select>
-        <input type="text" id="nameB1" placeholder="1" maxlength="10">
+        <select class="player-select" id="nameB1"></select>
       </div>
       <div class="name-field doubles-only show">
-        <select class="quick-pick" data-target="nameB2"></select>
-        <input type="text" id="nameB2" placeholder="2" maxlength="10">
+        <select class="player-select" id="nameB2"></select>
       </div>
     </div>
   </div>
 
+  <label>選手登録</label>
+  <div class="register-row">
+    <input type="text" id="newPlayerName" placeholder="新しい選手名" maxlength="10">
+    <button type="button" id="addPlayerBtn">登録</button>
+  </div>
   <div class="chips-label" id="chipsLabel" style="display:none;">登録済みの選手(タップで削除)</div>
   <div class="player-chips" id="playerChips"></div>
 
@@ -166,8 +176,8 @@
 
   <label>最初のサーブ権</label>
   <div class="radio-group" id="serveGroup">
-    <div class="radio-btn selected" data-val="A">チームA</div>
-    <div class="radio-btn" data-val="B">チームB</div>
+    <div class="radio-btn selected" data-val="A">左コート</div>
+    <div class="radio-btn" data-val="B">右コート</div>
   </div>
 
   <button class="primary" id="startBtn">試合開始</button>
@@ -175,6 +185,7 @@
 
 <div id="match" class="screen">
   <div class="match-header" id="matchHeader"></div>
+  <div class="status-line" id="statusLine"></div>
 
   <div class="court-wrap" id="court"></div>
 
@@ -217,16 +228,16 @@
 <div class="banner" id="editPlayersBanner">
   <div class="banner-title">選手名を編集</div>
   <div style="width:100%; max-width:280px;">
-    <label>チームA 選手1</label>
+    <label>左コート 選手1</label>
     <input type="text" id="editA1" maxlength="10">
     <div class="edit-doubles-field">
-      <label>チームA 選手2</label>
+      <label>左コート 選手2</label>
       <input type="text" id="editA2" maxlength="10">
     </div>
-    <label>チームB 選手1</label>
+    <label>右コート 選手1</label>
     <input type="text" id="editB1" maxlength="10">
     <div class="edit-doubles-field">
-      <label>チームB 選手2</label>
+      <label>右コート 選手2</label>
       <input type="text" id="editB2" maxlength="10">
     </div>
   </div>
@@ -237,10 +248,10 @@
 <div class="banner" id="editServeBanner">
   <div class="banner-title">サーブ権を修正</div>
   <div style="width:100%; max-width:280px;">
-    <label>サーブするチーム</label>
+    <label>サーブするコート</label>
     <div class="radio-group" id="serveTeamGroup">
-      <div class="radio-btn" data-val="A">チームA</div>
-      <div class="radio-btn" data-val="B">チームB</div>
+      <div class="radio-btn" data-val="A">左コート</div>
+      <div class="radio-btn" data-val="B">右コート</div>
     </div>
     <div id="servePlayerWrap" style="margin-top:14px;">
       <label>サーブする選手</label>
@@ -339,11 +350,11 @@
   function renderPlayerRegistryUI(){
     const list = loadRegisteredPlayers();
 
-    document.querySelectorAll('select.quick-pick').forEach(sel => {
-      const currentTargetVal = el(sel.dataset.target).value;
-      sel.innerHTML = '<option value="">-- 登録済みから選ぶ --</option>' +
+    document.querySelectorAll('select.player-select').forEach(sel => {
+      const currentVal = sel.value;
+      sel.innerHTML = '<option value="">選手を選ぶ</option>' +
         list.map(n => `<option value="${escapeXml(n)}">${escapeXml(n)}</option>`).join('');
-      sel.value = list.includes(currentTargetVal) ? currentTargetVal : '';
+      sel.value = list.includes(currentVal) ? currentVal : '';
     });
 
     el('chipsLabel').style.display = list.length ? 'block' : 'none';
@@ -355,28 +366,34 @@
     });
   }
 
-  document.querySelectorAll('select.quick-pick').forEach(sel => {
-    sel.addEventListener('change', () => {
-      if (sel.value) el(sel.dataset.target).value = sel.value;
-    });
+  el('addPlayerBtn').addEventListener('click', () => {
+    const name = el('newPlayerName').value.trim();
+    if (!name) return;
+    registerPlayer(name);
+    el('newPlayerName').value = '';
+    renderPlayerRegistryUI();
+  });
+  el('newPlayerName').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') el('addPlayerBtn').click();
   });
 
   renderPlayerRegistryUI();
 
   el('startBtn').addEventListener('click', () => {
     const mode = getSelected('modeGroup');
-    const a1 = el('nameA1').value.trim() || '1';
-    const a2 = el('nameA2').value.trim() || '2';
-    const b1 = el('nameB1').value.trim() || '1';
-    const b2 = el('nameB2').value.trim() || '2';
+    const a1 = el('nameA1').value;
+    const a2 = el('nameA2').value;
+    const b1 = el('nameB1').value;
+    const b2 = el('nameB2').value;
+
+    const missing = !a1 || !b1 || (mode === 'doubles' && (!a2 || !b2));
+    if (missing) {
+      alert('すべての選手を選んでください。まだ登録していない場合は「選手登録」欄から登録してください。');
+      return;
+    }
+
     const playersA = mode === 'doubles' ? [a1, a2] : [a1];
     const playersB = mode === 'doubles' ? [b1, b2] : [b1];
-
-    registerPlayer(a1);
-    if (mode === 'doubles') registerPlayer(a2);
-    registerPlayer(b1);
-    if (mode === 'doubles') registerPlayer(b2);
-    renderPlayerRegistryUI();
     const nameA = mode === 'doubles' ? `${a1}/${a2}` : a1;
     const nameB = mode === 'doubles' ? `${b1}/${b2}` : b1;
     const target = parseInt(el('target').value) || 15;
@@ -697,9 +714,41 @@
     </svg>`;
   }
 
+  // True if this team would WIN the game by scoring one more point right now.
+  function isMatchPoint(team){
+    const own = (team === 'A' ? state.scoreA : state.scoreB) + 1;
+    const opp = team === 'A' ? state.scoreB : state.scoreA;
+    return own >= state.target && own - opp >= 2;
+  }
+
+  // Deuce: scores are tied at or beyond one point below the target (e.g. 20-20
+  // in a 21-point game), meaning a 2-clear-point finish is still required.
+  function isDeuce(){
+    return state.scoreA === state.scoreB && state.scoreA >= state.target - 1;
+  }
+
+  function updateStatusLine(){
+    const line = el('statusLine');
+    if (isDeuce()) {
+      line.textContent = '⚖️ デュース';
+      line.className = 'status-line deuce';
+    } else if (isMatchPoint('A')) {
+      line.textContent = `🔥 マッチポイント (${state.nameA})`;
+      line.className = 'status-line matchpoint';
+    } else if (isMatchPoint('B')) {
+      line.textContent = `🔥 マッチポイント (${state.nameB})`;
+      line.className = 'status-line matchpoint';
+    } else {
+      line.textContent = '';
+      line.className = 'status-line';
+    }
+  }
+
   function render(){
     el('matchHeader').textContent =
       `ゲーム${state.gameNumber} / 全${state.maxGames}　${state.target}点先取`;
+
+    updateStatusLine();
 
     el('court').innerHTML = courtSVG();
 
