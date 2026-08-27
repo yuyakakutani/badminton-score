@@ -87,7 +87,12 @@
   }
   .doubles-only { display: none; margin-top: 6px; }
   .doubles-only.show { display: block; }
-  .scoreboard { display: flex; gap: 10px; }
+  .scoreboard { display: flex; gap: 10px; margin-bottom: 22px; }
+  .count-minus-row { display: flex; gap: 10px; margin-top: -12px; margin-bottom: 22px; }
+  .count-minus-row button {
+    flex: 1; padding: 10px; border-radius: 10px; border: 1px solid #333a48;
+    background: #1a2029; color: #a7adba; font-size: 13px; cursor: pointer;
+  }
   .team-panel {
     flex: 1; border-radius: 14px; padding: 18px 10px; text-align: center;
     cursor: pointer; user-select: none; border: 2px solid transparent;
@@ -116,6 +121,12 @@
   .timeline-label-a { color: #3b6fe0; }
   .timeline-label-b { color: #c0392b; }
   .timeline-scroll { overflow-x: auto; flex: 1; -webkit-overflow-scrolling: touch; }
+  .count-mode-btn {
+    width: 100%; padding: 12px; border-radius: 10px;
+    border: 1px solid #333a48; background: #1a2029; color: #ffd257;
+    font-size: 14px; font-weight: bold; cursor: pointer;
+  }
+  .section-divider { border-top: 1px solid #262c37; margin: 20px 0; }
   .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
   .controls button {
     flex: 1 1 45%; padding: 12px; border-radius: 10px; border: 1px solid #333a48;
@@ -138,6 +149,10 @@
 
 <div id="setup" class="screen active">
   <h1>🏸 バドミントン得点アプリ</h1>
+
+  <button type="button" class="count-mode-btn" id="countModeBtn">🔢 カウントモード</button>
+
+  <div class="section-divider"></div>
 
   <label>試合形式</label>
   <div class="radio-group" id="modeGroup">
@@ -231,6 +246,35 @@
   </div>
 </div>
 
+<div id="countMode" class="screen">
+  <h1>🔢 カウントモード</h1>
+
+  <div class="scoreboard">
+    <div class="team-panel a" id="countPanelA">
+      <div class="team-name">チーム1</div>
+      <div class="score-num" id="countScoreA">0</div>
+    </div>
+    <div class="team-panel b" id="countPanelB">
+      <div class="team-name">チーム2</div>
+      <div class="score-num" id="countScoreB">0</div>
+    </div>
+  </div>
+
+  <div class="count-minus-row">
+    <button type="button" id="countMinusA">-1点</button>
+    <button type="button" id="countMinusB">-1点</button>
+  </div>
+
+  <div class="timeline-wrap">
+    <div class="timeline-title">スコアタイムライン</div>
+    <div id="countTimelineChart"></div>
+  </div>
+
+  <div class="controls">
+    <button id="countBackBtn">🏠 設定に戻る</button>
+  </div>
+</div>
+
 <div class="banner" id="gameBanner">
   <div class="banner-title" id="gameBannerTitle"></div>
   <div class="banner-sub" id="gameBannerSub"></div>
@@ -286,6 +330,7 @@
 
 <script>
   let state = null;
+  let countState = null;
 
   function el(id){ return document.getElementById(id); }
 
@@ -801,6 +846,88 @@
   function timelineChip(x, y, value, color){
     return `<rect x="${x - 11}" y="${y - 11}" width="22" height="22" rx="6" fill="${color}"/>` +
       `<text x="${x}" y="${y + 4}" text-anchor="middle" font-size="11" font-weight="bold" fill="#fff">${value}</text>`;
+  }
+
+  // ---- count mode: just tap-to-count with a timeline, no badminton rules ----
+  // pointLog is a flat list of scorers ('A'/'B'). Scores and the timeline are
+  // always derived fresh from it, so the minus button can remove any entry
+  // (the team's most recent point) and everything stays consistent.
+  el('countModeBtn').addEventListener('click', () => {
+    countState = { pointLog: [] };
+    el('setup').classList.remove('active');
+    el('countMode').classList.add('active');
+    renderCountMode();
+  });
+
+  el('countPanelA').addEventListener('click', () => addCount('A'));
+  el('countPanelB').addEventListener('click', () => addCount('B'));
+  el('countMinusA').addEventListener('click', () => minusCount('A'));
+  el('countMinusB').addEventListener('click', () => minusCount('B'));
+
+  el('countBackBtn').addEventListener('click', () => {
+    el('countMode').classList.remove('active');
+    el('setup').classList.add('active');
+  });
+
+  function addCount(team){
+    countState.pointLog.push(team);
+    renderCountMode();
+  }
+
+  function minusCount(team){
+    const log = countState.pointLog;
+    for (let i = log.length - 1; i >= 0; i--) {
+      if (log[i] === team) {
+        log.splice(i, 1);
+        break;
+      }
+    }
+    renderCountMode();
+  }
+
+  function countScore(team){
+    return countState.pointLog.filter((t) => t === team).length;
+  }
+
+  function countTimelineSVG(){
+    const n = countState.pointLog.length;
+    if (!n) {
+      return '<div class="timeline-empty">まだ得点がありません</div>';
+    }
+    const chipStep = 28, padX = 14;
+    const W = n * chipStep + padX * 2;
+    const H = 110;
+    const xAt = (i) => padX + i * chipStep + chipStep / 2;
+    const rowAY = 30, rowBY = 82;
+
+    let chips = '';
+    let tallyA = 0, tallyB = 0;
+    countState.pointLog.forEach((team, i) => {
+      const x = xAt(i);
+      if (team === 'A') { tallyA++; chips += timelineChip(x, rowAY, tallyA, '#3b6fe0'); }
+      else { tallyB++; chips += timelineChip(x, rowBY, tallyB, '#c0392b'); }
+    });
+
+    const svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="100" xmlns="http://www.w3.org/2000/svg">
+      <line x1="0" y1="56" x2="${W}" y2="56" stroke="#262c37" stroke-width="1"/>
+      ${chips}
+    </svg>`;
+
+    return `<div class="timeline-row">
+      <div class="timeline-labels">
+        <div class="timeline-label-a">チーム1</div>
+        <div class="timeline-label-b">チーム2</div>
+      </div>
+      <div class="timeline-scroll">${svg}</div>
+    </div>`;
+  }
+
+  function renderCountMode(){
+    el('countScoreA').textContent = countScore('A');
+    el('countScoreB').textContent = countScore('B');
+    el('countTimelineChart').innerHTML = countTimelineSVG();
+    const scrollEl = el('countTimelineChart').querySelector('.timeline-scroll');
+    if (scrollEl) scrollEl.scrollLeft = scrollEl.scrollWidth;
   }
 
   function timelineSVG(){
