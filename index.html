@@ -102,6 +102,20 @@
   .score-num { font-size: 56px; font-weight: bold; line-height: 1; }
   .games-count { text-align: center; font-size: 14px; color: #a7adba; margin: 14px 0 4px; }
   .history { font-size: 12px; color: #7d8496; text-align: center; margin-bottom: 10px; }
+  .timeline-wrap {
+    margin-bottom: 14px; border-radius: 10px; background: #1a2029; border: 1px solid #262c37;
+    padding: 10px 8px 4px;
+  }
+  .timeline-title { font-size: 12px; color: #7d8496; text-align: center; margin-bottom: 4px; }
+  .timeline-empty { font-size: 12px; color: #555c6b; text-align: center; padding: 20px 0; }
+  .timeline-row { display: flex; }
+  .timeline-labels { flex-shrink: 0; width: 42px; display: flex; flex-direction: column; }
+  .timeline-label-a, .timeline-label-b {
+    height: 55px; display: flex; align-items: center; font-size: 11px; font-weight: bold;
+  }
+  .timeline-label-a { color: #3b6fe0; }
+  .timeline-label-b { color: #c0392b; }
+  .timeline-scroll { overflow-x: auto; flex: 1; -webkit-overflow-scrolling: touch; }
   .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
   .controls button {
     flex: 1 1 45%; padding: 12px; border-radius: 10px; border: 1px solid #333a48;
@@ -203,7 +217,11 @@
   </div>
 
   <div class="games-count" id="gamesCount"></div>
-  <div class="history" id="history"></div>
+
+  <div class="timeline-wrap">
+    <div class="timeline-title">スコアタイムライン</div>
+    <div id="timelineChart"></div>
+  </div>
 
   <div class="controls">
     <button id="undoBtn">↩ 元に戻す</button>
@@ -223,6 +241,7 @@
   <div class="banner-title" id="matchBannerTitle"></div>
   <div class="banner-sub" id="matchBannerSub"></div>
   <button id="newMatchBtn">新しい試合を始める</button>
+  <button id="closeMatchBannerBtn" style="background:transparent; color:#a7adba;">閉じる(試合画面に戻る)</button>
 </div>
 
 <div class="banner" id="editPlayersBanner">
@@ -408,6 +427,7 @@
       scoreA: 0, scoreB: 0,
       gamesA: 0, gamesB: 0,
       history: [],
+      pointLog: [],
       serving: firstServer,
       rightIdx: { A: 0, B: 0 },
       ends: { A: 'left', B: 'right' },
@@ -437,6 +457,9 @@
     el('matchBanner').classList.remove('show');
     el('match').classList.remove('active');
     el('setup').classList.add('active');
+  });
+  el('closeMatchBannerBtn').addEventListener('click', () => {
+    el('matchBanner').classList.remove('show');
   });
 
   // ---- edit players mid-match (names only - scores/serve state untouched) ----
@@ -552,7 +575,7 @@
     return JSON.parse(JSON.stringify({
       scoreA: state.scoreA, scoreB: state.scoreB,
       gamesA: state.gamesA, gamesB: state.gamesB,
-      history: state.history, serving: state.serving,
+      history: state.history, pointLog: state.pointLog, serving: state.serving,
       ends: state.ends, gameNumber: state.gameNumber,
       rightIdx: state.rightIdx
     }));
@@ -564,6 +587,7 @@
 
     const prevServing = state.serving;
     if (team === 'A') state.scoreA++; else state.scoreB++;
+    state.pointLog.push({ a: state.scoreA, b: state.scoreB, scorer: team });
 
     // Doubles serving rule: when a side WINS A POINT WHILE ALREADY SERVING, the
     // server and partner swap the right/left service court (BWF Law 12.4).
@@ -604,6 +628,7 @@
 
     showGameBanner(winner);
     state.scoreA = 0; state.scoreB = 0;
+    state.pointLog = [];
     state.serving = winner;
     state.rightIdx = { A: 0, B: 0 };
     state.gameNumber++;
@@ -766,11 +791,55 @@
 
     el('gamesCount').textContent = `セット数　${state.nameA} ${state.gamesA} - ${state.gamesB} ${state.nameB}`;
 
-    el('history').textContent = state.history.length
-      ? state.history.map((g, i) => `第${i+1}G ${g.a}-${g.b}`).join('　')
-      : '';
+    el('timelineChart').innerHTML = timelineSVG();
+    const timelineScroll = el('timelineChart').querySelector('.timeline-scroll');
+    if (timelineScroll) timelineScroll.scrollLeft = timelineScroll.scrollWidth;
 
     el('undoBtn').style.visibility = state.undoStack.length ? 'visible' : 'hidden';
+  }
+
+  function timelineChip(x, y, value, color){
+    return `<rect x="${x - 11}" y="${y - 11}" width="22" height="22" rx="6" fill="${color}"/>` +
+      `<text x="${x}" y="${y + 4}" text-anchor="middle" font-size="11" font-weight="bold" fill="#fff">${value}</text>`;
+  }
+
+  function timelineSVG(){
+    const n = state.pointLog.length;
+    if (!n) {
+      return '<div class="timeline-empty">まだ得点がありません</div>';
+    }
+
+    // Two lanes (one per court), chips placed in real rally order along a
+    // shared x-axis - so bunched chips show a scoring streak, and gaps show
+    // the other side was scoring during that stretch. Fixed spacing per chip
+    // (rather than squeezing to a fixed width) keeps chips readable even in
+    // long deuce games. Labels are plain HTML outside the SVG so they stay
+    // put while only the chip area scrolls horizontally.
+    const chipStep = 28, padX = 14;
+    const W = n * chipStep + padX * 2;
+    const H = 110;
+    const xAt = (i) => padX + i * chipStep + chipStep / 2;
+    const rowAY = 30, rowBY = 82;
+
+    let chips = '';
+    state.pointLog.forEach((p, i) => {
+      const x = xAt(i);
+      if (p.scorer === 'A') chips += timelineChip(x, rowAY, p.a, '#3b6fe0');
+      else chips += timelineChip(x, rowBY, p.b, '#c0392b');
+    });
+
+    const svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="100" xmlns="http://www.w3.org/2000/svg">
+      <line x1="0" y1="56" x2="${W}" y2="56" stroke="#262c37" stroke-width="1"/>
+      ${chips}
+    </svg>`;
+
+    return `<div class="timeline-row">
+      <div class="timeline-labels">
+        <div class="timeline-label-a">${shortName(state.nameA)}</div>
+        <div class="timeline-label-b">${shortName(state.nameB)}</div>
+      </div>
+      <div class="timeline-scroll">${svg}</div>
+    </div>`;
   }
 </script>
 </body>
