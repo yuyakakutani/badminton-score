@@ -126,7 +126,27 @@
     border: 1px solid #333a48; background: #1a2029; color: #ffd257;
     font-size: 14px; font-weight: bold; cursor: pointer;
   }
+  .mode-btn-row { display: flex; gap: 10px; }
+  .mode-btn-row .count-mode-btn { flex: 1; }
   .section-divider { border-top: 1px solid #262c37; margin: 20px 0; }
+  .chip.toggle { padding: 7px 12px; font-size: 13px; cursor: pointer; color: #7d8496; }
+  .chip.toggle.selected { background: #3b6fe0; border-color: #3b6fe0; color: #fff; }
+  .pair-note { font-size: 12px; color: #7d8496; margin-top: 8px; }
+  .round-card {
+    margin-top: 14px; border-radius: 10px; background: #1a2029; border: 1px solid #262c37; padding: 12px;
+  }
+  .round-title { font-size: 14px; font-weight: bold; color: #c4c9d4; margin-bottom: 10px; }
+  .round-warn { font-size: 12px; color: #ffb020; margin-bottom: 10px; }
+  .pair-list { display: flex; flex-direction: column; gap: 8px; }
+  .pair-box {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;
+    background: #1b2e52; font-size: 15px; font-weight: bold;
+  }
+  .pair-no { font-size: 12px; font-weight: normal; color: #a7adba; flex-shrink: 0; }
+  .pair-repeat { margin-left: auto; font-size: 11px; font-weight: normal; color: #ffb020; }
+  .rest-line { font-size: 13px; color: #a7adba; margin-top: 10px; }
+  .round-history { font-size: 12px; color: #7d8496; margin-top: 6px; line-height: 1.7; }
+  .round-history b { color: #a7adba; font-weight: normal; }
   .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
   .controls button {
     flex: 1 1 45%; padding: 12px; border-radius: 10px; border: 1px solid #333a48;
@@ -150,7 +170,10 @@
 <div id="setup" class="screen active">
   <h1>🏸 バドミントン得点アプリ</h1>
 
-  <button type="button" class="count-mode-btn" id="countModeBtn">🔢 カウントモード</button>
+  <div class="mode-btn-row">
+    <button type="button" class="count-mode-btn" id="countModeBtn">🔢 カウントモード</button>
+    <button type="button" class="count-mode-btn" id="pairModeBtn">👥 ペア分け</button>
+  </div>
 
   <div class="section-divider"></div>
 
@@ -273,6 +296,42 @@
   <div class="controls">
     <button id="countBackBtn">🏠 設定に戻る</button>
   </div>
+</div>
+
+<div id="pairMode" class="screen">
+  <h1>👥 ペア分け</h1>
+
+  <label>選手登録</label>
+  <div class="register-row">
+    <input type="text" id="pairNewPlayerName" placeholder="新しい選手名" maxlength="10">
+    <button type="button" id="pairAddPlayerBtn">登録</button>
+  </div>
+
+  <label>参加する選手(タップで切り替え)</label>
+  <div class="player-chips" id="pairParticipants"></div>
+  <div class="pair-note" id="pairParticipantsNote"></div>
+
+  <button class="primary" id="makePairsBtn">ペアを作る</button>
+
+  <div id="pairCurrent"></div>
+
+  <div id="pairHistoryWrap" style="display:none;">
+    <label>これまでの組み合わせ</label>
+    <div class="round-history" id="pairHistory"></div>
+    <button class="secondary" id="redoPairsBtn">↻ 今回の組み合わせを作り直す</button>
+    <button class="secondary" id="resetPairsBtn">履歴をリセット</button>
+  </div>
+
+  <div class="controls">
+    <button id="pairBackBtn">🏠 設定に戻る</button>
+  </div>
+</div>
+
+<div class="banner" id="resetPairsBanner">
+  <div class="banner-title">ペアの履歴をリセット</div>
+  <div class="banner-sub">これまでの組み合わせをすべて消去します。<br>よろしいですか？</div>
+  <button id="confirmResetPairsBtn" style="background:#c0392b;">リセットする</button>
+  <button id="cancelResetPairsBtn" style="background:transparent; color:#a7adba;">キャンセル</button>
 </div>
 
 <div class="banner" id="gameBanner">
@@ -968,6 +1027,282 @@
       <div class="timeline-scroll">${svg}</div>
     </div>`;
   }
+
+  // ---- pair mode: repeatedly split the registered players into 2-person
+  // pairs, avoiding partners they've already played with. History is saved
+  // in this browser so it carries over between sessions until reset. ----
+  const PAIR_STORAGE_KEY = 'badmintonPairHistory';
+
+  function loadPairData(){
+    try {
+      const raw = localStorage.getItem(PAIR_STORAGE_KEY);
+      const data = raw ? JSON.parse(raw) : null;
+      if (data && Array.isArray(data.rounds) && Array.isArray(data.excluded)) return data;
+    } catch (e) {}
+    return { rounds: [], excluded: [] };
+  }
+
+  function savePairData(data){
+    try { localStorage.setItem(PAIR_STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
+  }
+
+  function pairKey(a, b){
+    return a < b ? `${a}\n${b}` : `${b}\n${a}`;
+  }
+
+  function pairParticipants(data){
+    return loadRegisteredPlayers().filter(n => !data.excluded.includes(n));
+  }
+
+  function shuffle(list){
+    const arr = list.slice();
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  // Stand-in "player" used when the head count is odd: whoever is paired
+  // with it sits out that round. Treating rest as a pair means rests rotate
+  // fairly through the same logic that rotates partners.
+  const REST_SLOT = '\u0000rest';
+
+  // Lists every way to split `players` into pairs using only pairs in
+  // `allowed`, in random order (generator, so callers can stop early).
+  // `budget` caps the total search steps across all calls sharing it.
+  function* perfectPairings(players, allowed, budget){
+    if (budget.left-- <= 0) return;
+    if (!players.length) { yield []; return; }
+    const [p, ...others] = players;
+    for (const q of shuffle(others)) {
+      if (!allowed.has(pairKey(p, q))) continue;
+      const remaining = others.filter(n => n !== q);
+      for (const restPairs of perfectPairings(remaining, allowed, budget)) {
+        yield [[p, q], ...restPairs];
+      }
+    }
+  }
+
+  // Looks ahead several rounds instead of just one: picking the next round
+  // greedily can leave the leftover pairs impossible to split cleanly later
+  // (e.g. a repeat at round 6 of 8 players even though 7 clean rounds exist).
+  // So we search for the longest run of rounds that only use `allowed` pairs
+  // and return the first round of that run. Node limit keeps big groups from
+  // freezing the page; whatever the best run found so far is gets used.
+  function planNextRound(players, allowed, avoidFirst){
+    let maxDepth = Infinity;
+    players.forEach(p => {
+      maxDepth = Math.min(maxDepth, players.filter(q => q !== p && allowed.has(pairKey(p, q))).length);
+    });
+    let bestFirst = null, bestDepth = 0;
+    const budget = { left: 50000 };
+
+    function search(remaining, depth, first){
+      if (depth > bestDepth) { bestDepth = depth; bestFirst = first; }
+      if (bestDepth >= maxDepth || depth >= maxDepth) return;
+      for (const round of perfectPairings(players, remaining, budget)) {
+        if (bestDepth >= maxDepth) return;
+        const keys = round.map(([a, b]) => pairKey(a, b));
+        if (depth === 0 && keys.some(k => avoidFirst.has(k))) continue;
+        const next = new Set(remaining);
+        keys.forEach(k => next.delete(k));
+        search(next, depth + 1, first || round);
+      }
+    }
+    search(allowed, 0, null);
+    return bestFirst;
+  }
+
+  // Fallback when no clean round exists: the pairing with the lowest total
+  // cost, where a pair's cost grows with how often they've already partnered
+  // (squared, so repeats spread out rather than piling onto one pair), plus
+  // a bit extra if they partnered in the immediately previous round.
+  function cheapestPairing(players, counts, lastKeys){
+    const cost = (a, b) => {
+      const key = pairKey(a, b);
+      const c = counts[key] || 0;
+      return c * c * 100 + (lastKeys.has(key) ? 50 : 0);
+    };
+    const order = shuffle(players);
+    let best = null, bestCost = Infinity, nodes = 0;
+    const used = new Set();
+    const current = [];
+
+    function dfs(costSoFar){
+      if (costSoFar >= bestCost || nodes++ > 200000) return;
+      const p = order.find(n => !used.has(n));
+      if (p === undefined) {
+        best = current.slice();
+        bestCost = costSoFar;
+        return;
+      }
+      used.add(p);
+      const options = order.filter(n => !used.has(n))
+        .map(q => ({ q, c: cost(p, q) }))
+        .sort((x, y) => x.c - y.c);
+      for (const { q, c } of options) {
+        used.add(q);
+        current.push([p, q]);
+        dfs(costSoFar + c);
+        current.pop();
+        used.delete(q);
+      }
+      used.delete(p);
+    }
+    dfs(0);
+    return best;
+  }
+
+  function makePairRound(data){
+    const players = pairParticipants(data);
+    if (players.length % 2 === 1) players.push(REST_SLOT);
+
+    const counts = {};
+    data.rounds.forEach(r => {
+      const pairs = r.pairs.concat(r.rest.map(n => [n, REST_SLOT]));
+      pairs.forEach(([a, b]) => { const k = pairKey(a, b); counts[k] = (counts[k] || 0) + 1; });
+    });
+    const last = data.rounds[data.rounds.length - 1];
+    const lastKeys = new Set(last
+      ? last.pairs.concat(last.rest.map(n => [n, REST_SLOT])).map(([a, b]) => pairKey(a, b))
+      : []);
+
+    // "Clean" pairs = those used the fewest times so far (0 on the first lap
+    // through everyone; once every pair has been used, the next lap starts).
+    let minCount = Infinity;
+    const allKeys = [];
+    players.forEach((p, i) => players.slice(i + 1).forEach(q => {
+      const k = pairKey(p, q);
+      allKeys.push(k);
+      minCount = Math.min(minCount, counts[k] || 0);
+    }));
+    const allowed = new Set(allKeys.filter(k => (counts[k] || 0) === minCount));
+
+    const round = planNextRound(players, allowed, lastKeys)
+      || planNextRound(players, allowed, new Set())
+      || cheapestPairing(players, counts, lastKeys);
+
+    const pairs = round.filter(([a, b]) => a !== REST_SLOT && b !== REST_SLOT);
+    const rest = round.filter(([a, b]) => a === REST_SLOT || b === REST_SLOT)
+      .map(([a, b]) => a === REST_SLOT ? b : a);
+    // times = how many times this pair has now played together, incl. this round
+    const times = pairs.map(([a, b]) => (counts[pairKey(a, b)] || 0) + 1);
+    return { pairs, rest, times };
+  }
+
+  function pairBox(pair, times, no){
+    const repeat = times > 1 ? `<span class="pair-repeat">${times}回目</span>` : '';
+    return `<div class="pair-box"><span class="pair-no">ペア${no}</span>${escapeXml(pair[0])} / ${escapeXml(pair[1])}${repeat}</div>`;
+  }
+
+  function renderPairMode(){
+    const data = loadPairData();
+    const registered = loadRegisteredPlayers();
+    const participants = pairParticipants(data);
+
+    el('pairParticipants').innerHTML = registered.map(n => `
+      <span class="chip toggle${data.excluded.includes(n) ? '' : ' selected'}" data-name="${escapeXml(n)}">${escapeXml(n)}</span>
+    `).join('');
+    el('pairParticipants').querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const d = loadPairData();
+        const name = chip.dataset.name;
+        d.excluded = d.excluded.includes(name) ? d.excluded.filter(n => n !== name) : d.excluded.concat(name);
+        savePairData(d);
+        renderPairMode();
+      });
+    });
+    el('pairParticipantsNote').textContent = registered.length
+      ? `参加 ${participants.length}人${participants.length % 2 === 1 ? '(奇数のため毎回1人お休み)' : ''}`
+      : 'まだ選手が登録されていません。上の欄から登録してください。';
+
+    const round = data.rounds[data.rounds.length - 1];
+    if (!round) {
+      el('pairCurrent').innerHTML = '';
+      el('pairHistoryWrap').style.display = 'none';
+      return;
+    }
+
+    const pairList = round.pairs.map((pair, i) => pairBox(pair, round.times[i], i + 1)).join('');
+    const warn = round.times.some(t => t > 1)
+      ? '<div class="round-warn">⚠️ 被らない組み合わせが残っていないため、組んだ回数が少ないペアを優先しました</div>'
+      : '';
+    const rest = round.rest.length
+      ? `<div class="rest-line">お休み: ${round.rest.map(escapeXml).join('、')}</div>`
+      : '';
+    el('pairCurrent').innerHTML = `<div class="round-card">
+      <div class="round-title">第${data.rounds.length}回</div>
+      ${warn}<div class="pair-list">${pairList}</div>${rest}
+    </div>`;
+
+    el('pairHistoryWrap').style.display = 'block';
+    el('pairHistory').innerHTML = data.rounds.map((r, idx) => ({ r, idx })).reverse().map(({ r, idx }) => {
+      const pairs = r.pairs.map(([a, b]) => `${escapeXml(a)}/${escapeXml(b)}`).join('、');
+      const rest = r.rest.length ? `(休み: ${r.rest.map(escapeXml).join('、')})` : '';
+      return `<div><b>第${idx + 1}回</b>　${pairs}${rest}</div>`;
+    }).join('');
+  }
+
+  el('pairModeBtn').addEventListener('click', () => {
+    el('setup').classList.remove('active');
+    el('pairMode').classList.add('active');
+    window.scrollTo(0, 0);
+    renderPairMode();
+  });
+
+  el('pairBackBtn').addEventListener('click', () => {
+    el('pairMode').classList.remove('active');
+    el('setup').classList.add('active');
+    window.scrollTo(0, 0);
+  });
+
+  el('pairAddPlayerBtn').addEventListener('click', () => {
+    const name = el('pairNewPlayerName').value.trim();
+    if (!name) return;
+    registerPlayer(name);
+    el('pairNewPlayerName').value = '';
+    renderPlayerRegistryUI();
+    renderPairMode();
+  });
+  el('pairNewPlayerName').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') el('pairAddPlayerBtn').click();
+  });
+
+  el('makePairsBtn').addEventListener('click', () => {
+    const data = loadPairData();
+    if (pairParticipants(data).length < 2) {
+      alert('ペアを作るには2人以上の参加者が必要です。');
+      return;
+    }
+    data.rounds.push(makePairRound(data));
+    savePairData(data);
+    renderPairMode();
+  });
+
+  el('redoPairsBtn').addEventListener('click', () => {
+    const data = loadPairData();
+    if (!data.rounds.length) return;
+    data.rounds.pop();
+    if (pairParticipants(data).length < 2) return;
+    data.rounds.push(makePairRound(data));
+    savePairData(data);
+    renderPairMode();
+  });
+
+  el('resetPairsBtn').addEventListener('click', () => {
+    el('resetPairsBanner').classList.add('show');
+  });
+  el('cancelResetPairsBtn').addEventListener('click', () => {
+    el('resetPairsBanner').classList.remove('show');
+  });
+  el('confirmResetPairsBtn').addEventListener('click', () => {
+    el('resetPairsBanner').classList.remove('show');
+    const data = loadPairData();
+    data.rounds = [];
+    savePairData(data);
+    renderPairMode();
+  });
 </script>
 </body>
 </html>
